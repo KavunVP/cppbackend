@@ -173,20 +173,23 @@ class Cafeteria {
 public:
     explicit Cafeteria(net::io_context& io)
         : io_{io}
+        , strand_{net::make_strand(io)}   // добавляем strand
         , next_hotdog_id_{1} {
     }
 
     // Асинхронно готовит хот-дог и вызывает handler, как только хот-дог будет готов.
     // Этот метод может быть вызван из произвольного потока
     void OrderHotDog(HotDogHandler handler) {
-        auto bread = store_.GetBread();
-        auto sausage = store_.GetSausage();
-        int hotdog_id = next_hotdog_id_++;
-
-        auto session = std::make_shared<CookingSession>(
-            io_, gas_cooker_, bread, sausage, std::move(handler), hotdog_id
-        );
-        session->Start();
+        // Получение ингредиентов выполняется последовательно через strand
+        net::dispatch(strand_, [this, handler = std::move(handler)]() mutable {
+            auto bread = store_.GetBread();
+            auto sausage = store_.GetSausage();
+            int hotdog_id = next_hotdog_id_++;   // atomic, безопасно
+            auto session = std::make_shared<CookingSession>(
+                io_, gas_cooker_, std::move(bread), std::move(sausage), std::move(handler), hotdog_id
+            );
+            session->Start();   // запуск сессии (внутри использует свой strand)
+        });
     }
 
 private:
@@ -199,4 +202,5 @@ private:
     // enable_shared_from_this.
     std::shared_ptr<GasCooker> gas_cooker_ = std::make_shared<GasCooker>(io_);
     std::atomic<int> next_hotdog_id_;
+    net::strand<net::io_context::executor_type> strand_;   // для синхронизации доступа к store_
 };
