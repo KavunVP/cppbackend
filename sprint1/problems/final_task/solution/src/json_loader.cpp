@@ -6,6 +6,76 @@
 
 namespace json_loader {
 
+// Загрузка одной дороги из JSON-объекта
+model::Road LoadRoad(const boost::json::object& obj) {
+    int x0 = obj.at("x0").as_int64();
+    int y0 = obj.at("y0").as_int64();
+    if (obj.contains("x1")) { // горизонтальная
+        int x1 = obj.at("x1").as_int64();
+        return model::Road(model::Road::HORIZONTAL, {x0, y0}, x1);
+    } else { // вертикальная
+        int y1 = obj.at("y1").as_int64();
+        return model::Road(model::Road::VERTICAL, {x0, y0}, y1);
+    }
+}
+
+// Загрузка массива дорог
+void LoadRoads(model::Map& map, const boost::json::array& roads_array) {
+    for (const auto& road_val : roads_array) {
+        map.AddRoad(LoadRoad(road_val.as_object()));
+    }
+}
+
+// Загрузка одного здания
+model::Building LoadBuilding(const boost::json::object& obj) {
+    int x = obj.at("x").as_int64();
+    int y = obj.at("y").as_int64();
+    int w = obj.at("w").as_int64();
+    int h = obj.at("h").as_int64();
+    return model::Building({{x, y}, {w, h}});
+}
+
+void LoadBuildings(model::Map& map, const boost::json::array& buildings_array) {
+    for (const auto& building_val : buildings_array) {
+        map.AddBuilding(LoadBuilding(building_val.as_object()));
+    }
+}
+
+// Загрузка одного офиса
+model::Office LoadOffice(const boost::json::object& obj) {
+    std::string id = obj.at("id").as_string().c_str();
+    int x = obj.at("x").as_int64();
+    int y = obj.at("y").as_int64();
+    int offsetX = obj.at("offsetX").as_int64();
+    int offsetY = obj.at("offsetY").as_int64();
+    return model::Office(model::Office::Id(id), {x, y}, {offsetX, offsetY});
+}
+
+void LoadOffices(model::Map& map, const boost::json::array& offices_array) {
+    for (const auto& office_val : offices_array) {
+        map.AddOffice(LoadOffice(office_val.as_object()));
+    }
+}
+
+// Загрузка одной карты
+model::Map LoadMap(const boost::json::object& map_obj) {
+    std::string id = map_obj.at("id").as_string().c_str();
+    std::string name = map_obj.at("name").as_string().c_str();
+    model::Map map(model::Map::Id(id), name);
+
+    if (map_obj.contains("roads")) {
+        LoadRoads(map, map_obj.at("roads").as_array());
+    }
+    if (map_obj.contains("buildings")) {
+        LoadBuildings(map, map_obj.at("buildings").as_array());
+    }
+    if (map_obj.contains("offices")) {
+        LoadOffices(map, map_obj.at("offices").as_array());
+    }
+
+    return map;
+}
+
 model::Game LoadGame(const std::filesystem::path& json_path) {
     model::Game game;
 
@@ -17,64 +87,20 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
     buffer << file.rdbuf();
     std::string data = buffer.str();
 
-    auto value = boost::json::parse(data);
-    auto const& root = value.as_object();
+    boost::json::value value;
+    try {
+        value = boost::json::parse(data);
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("Failed to parse JSON: ") + e.what());
+    }
 
+    auto const& root = value.as_object();
     if (!root.contains("maps")) {
         return game;
     }
 
     for (auto const& map_val : root.at("maps").as_array()) {
-        auto const& map_obj = map_val.as_object();
-
-        std::string id = map_obj.at("id").as_string().c_str();
-        std::string name = map_obj.at("name").as_string().c_str();
-        model::Map map(model::Map::Id(id), name);
-
-        // Roads
-        if (map_obj.contains("roads")) {
-            for (auto const& road_val : map_obj.at("roads").as_array()) {
-                auto const& road_obj = road_val.as_object();
-                if (road_obj.contains("x1")) { // горизонтальная
-                    int x0 = road_obj.at("x0").as_int64();
-                    int y0 = road_obj.at("y0").as_int64();
-                    int x1 = road_obj.at("x1").as_int64();
-                    map.AddRoad(model::Road(model::Road::HORIZONTAL, {x0, y0}, x1));
-                } else { // вертикальная
-                    int x0 = road_obj.at("x0").as_int64();
-                    int y0 = road_obj.at("y0").as_int64();
-                    int y1 = road_obj.at("y1").as_int64();
-                    map.AddRoad(model::Road(model::Road::VERTICAL, {x0, y0}, y1));
-                }
-            }
-        }
-
-        // Buildings
-        if (map_obj.contains("buildings")) {
-            for (auto const& building_val : map_obj.at("buildings").as_array()) {
-                auto const& building_obj = building_val.as_object();
-                int x = building_obj.at("x").as_int64();
-                int y = building_obj.at("y").as_int64();
-                int w = building_obj.at("w").as_int64();
-                int h = building_obj.at("h").as_int64();
-                map.AddBuilding(model::Building({{x, y}, {w, h}}));
-            }
-        }
-
-        // Offices
-        if (map_obj.contains("offices")) {
-            for (auto const& office_val : map_obj.at("offices").as_array()) {
-                auto const& office_obj = office_val.as_object();
-                std::string office_id = office_obj.at("id").as_string().c_str();
-                int x = office_obj.at("x").as_int64();
-                int y = office_obj.at("y").as_int64();
-                int offsetX = office_obj.at("offsetX").as_int64();
-                int offsetY = office_obj.at("offsetY").as_int64();
-                map.AddOffice(model::Office(model::Office::Id(office_id), {x, y}, {offsetX, offsetY}));
-            }
-        }
-
-        game.AddMap(std::move(map));
+        game.AddMap(LoadMap(map_val.as_object()));
     }
 
     return game;

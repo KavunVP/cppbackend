@@ -42,6 +42,9 @@ void SessionBase::OnRead(beast::error_code ec, std::size_t /*bytes_read*/) {
 void SessionBase::Close() {
     beast::error_code ec;
     stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
+    if (ec) {
+        ReportError(ec, "shutdown"sv);
+    }
 }
 
 } // namespace http_server
