@@ -13,75 +13,79 @@ permissions:
 
 
 jobs:
-#  sprint_1:
-#    if: github.repository_owner != 'cpppracticum'
-#    runs-on: ubuntu-22.04
-#    container:
-#      image: praktikumcpp/practicum_cpp_backend:latest
-#      volumes:
-#        - /var/run/docker.sock:/var/run/docker.sock
-#      options: --name main-container
-#    steps:
-#      - name: get docker network
-#        run: echo "DOCKER_NETWORK=$(docker inspect main-container -f '{{range $k, $v := .NetworkSettings.Networks}}{{printf "%s" $k}}{{end}}')" >> $GITHUB_ENV
-#
-#      - name: Checkout code & tests
-#        uses: actions/checkout@v3
-#        with:
-#          submodules: true
-#
-#     - name: Install dependencies
-#        run: |
-#          pip uninstall conan -y
-#          pip install -U conan==1.59.0
-#          cp -R /home/forconan/.conan /github/home/.conan
-#
-#      - name: run tests sprint1 sum
-#        run: |
-#          cd cpp-backend-tests-practicum/scripts/sprint1
-#         ./sum/run.sh
-#
-#      - name: run tests sprint1 sync_server
-#        run: |
-#          cd cpp-backend-tests-practicum/scripts/sprint1
-#          ./sync_server/run.sh
-#
-#      - name: run tests sprint1 restaurant_single_threaded
-#        run: |
-#          cd cpp-backend-tests-practicum/scripts/sprint1
-#          ./restaurant_single_threaded/run.sh
-#
-#      - name: run tests sprint1 cafeteria
-#        run: |
-#          cd cpp-backend-tests-practicum/scripts/sprint1
-#          ./cafeteria/run.sh
-#
-#      - name: run tests sprint1 async_server
-#        run: |
-#          cd cpp-backend-tests-practicum/scripts/sprint1
-#          ./async_server/run.sh
-#
-#      - name: run tests sprint1 map_json
-#        run: |
-#          cd cpp-backend-tests-practicum/scripts/sprint1
-#          ./map_json/run.sh
-#
-#      - name: run tests sprint1 final_task
-#        run: |
-#          cd cpp-backend-tests-practicum/scripts/sprint1
-#          ./final_task/run.sh
-#
-#      - name: Publish XML reports
-#        uses: EnricoMi/publish-unit-test-result-action@v2
-#        if: always()
-#        with:
-#          junit_files: ${{ github.workspace }}/*.xml
-#
+  sprint_1:
+    if: github.repository_owner != 'cpppracticum'
+    runs-on: ubuntu-22.04
+    container:
+      image: praktikumcpp/practicum_cpp_backend:latest
+      env:
+        DOCKER_API_VERSION: "1.44"
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+      options: --name main-container
+    steps:
+      - name: get docker network
+        run: echo "DOCKER_NETWORK=$(docker inspect main-container -f '{{range $k, $v := .NetworkSettings.Networks}}{{printf "%s" $k}}{{end}}')" >> $GITHUB_ENV
+
+      - name: Checkout code & tests
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Install dependencies
+        run: |
+          pip uninstall conan -y
+          pip install -U conan==1.59.0
+          cp -R /home/forconan/.conan /github/home/.conan
+
+      - name: run tests sprint1 sum
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint1
+          ./sum/run.sh
+
+      - name: run tests sprint1 sync_server
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint1
+          ./sync_server/run.sh
+
+      - name: run tests sprint1 restaurant_single_threaded
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint1
+          ./restaurant_single_threaded/run.sh
+
+      - name: run tests sprint1 cafeteria
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint1
+          ./cafeteria/run.sh
+
+      - name: run tests sprint1 async_server
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint1
+          ./async_server/run.sh
+
+      - name: run tests sprint1 map_json
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint1
+          ./map_json/run.sh
+
+      - name: run tests sprint1 final_task
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint1
+          ./final_task/run.sh
+
+      - name: Publish XML reports
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          junit_files: ${{ github.workspace }}/*.xml
+
   sprint_2:
     if: github.repository_owner != 'cpppracticum'
     runs-on: ubuntu-22.04
     container:
       image: praktikumcpp/practicum_cpp_backend:latest
+      env:
+        DOCKER_API_VERSION: "1.44"
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
       options: --name main-container
@@ -288,6 +292,8 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: praktikumcpp/practicum_cpp_backend_server:latest
+      env:
+        DOCKER_API_VERSION: "1.44"
       options: --privileged
     services:
       cppserver:
@@ -331,6 +337,8 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: praktikumcpp/practicum_cpp_backend:latest
+      env:
+        DOCKER_API_VERSION: "1.44"
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
       options: --name main-container
