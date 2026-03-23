@@ -88,7 +88,7 @@ private:
         std::string remote_ip;
         try {
             remote_ip = stream_.socket().remote_endpoint().address().to_string();
-        } catch (...) {
+        } catch (const std::exception&) {
             remote_ip = "unknown";
         }
 
