@@ -187,7 +187,7 @@ void ApiHandler::operator()(http::request<Body, http::basic_fields<Allocator>>&&
             target = target.substr(0, pos);
         }
 
-        if (!target.starts_with("/api/")) {
+        if (!target.starts_with(API_PREFIX)) {
             // Это не API запрос, возвращаем ошибку
             return send(MakeErrorResponse(http::status::bad_request, "Bad request",
                                           version, keep_alive));
@@ -201,14 +201,14 @@ void ApiHandler::operator()(http::request<Body, http::basic_fields<Allocator>>&&
                 assert(self->api_strand_.running_in_this_thread());
                 return self->HandleApiRequest(std::move(req), target, version, keep_alive,
                                               std::move(send));
-            } catch (...) {
+            } catch (const std::exception&) {
                 return send(self->MakeErrorResponse(http::status::internal_server_error,
                                                     "Internal server error", version, keep_alive));
             }
         };
 
         net::dispatch(api_strand_, std::move(handle));
-    } catch (...) {
+    } catch (const std::exception&) {
         send(MakeErrorResponse(http::status::internal_server_error, "Internal server error",
                                version, keep_alive));
     }
@@ -219,32 +219,32 @@ void ApiHandler::HandleApiRequest(http::request<Body, http::basic_fields<Allocat
                                   std::string_view target,
                                   unsigned version, bool keep_alive, Send&& send) {
     // /api/v1/game/join - POST (проверяем раньше, чем maps, чтобы избежать ложных срабатываний)
-    if (target == "/api/v1/game/join") {
+    if (target == GAME_JOIN) {
         return HandleJoinRequest(std::move(req), version, keep_alive, std::move(send));
     }
 
     // /api/v1/game/tick - POST
-    if (target == "/api/v1/game/tick") {
+    if (target == GAME_TICK) {
         return HandleTickRequest(std::move(req), version, keep_alive, std::move(send));
     }
 
     // /api/v1/game/player/action - POST
-    if (target == "/api/v1/game/player/action") {
+    if (target == GAME_PLAYER_ACTION) {
         return HandlePlayerActionRequest(std::move(req), version, keep_alive, std::move(send));
     }
 
     // /api/v1/game/state - GET
-    if (target == "/api/v1/game/state") {
+    if (target == GAME_STATE) {
         return HandleStateRequest(std::move(req), version, keep_alive, std::move(send));
     }
 
     // /api/v1/game/players - GET
-    if (target == "/api/v1/game/players") {
+    if (target == GAME_PLAYERS) {
         return HandlePlayersRequest(std::move(req), version, keep_alive, std::move(send));
     }
 
     // /api/v1/maps и /api/v1/maps/{id}
-    if (target.starts_with("/api/v1/maps")) {
+    if (target.starts_with(API_V1_MAPS)) {
         return HandleMapsRequest(std::move(req), target, version, keep_alive, std::move(send));
     }
 
@@ -263,9 +263,7 @@ void ApiHandler::HandleMapsRequest(http::request<Body, http::basic_fields<Alloca
                                       version, keep_alive));
     }
 
-    constexpr std::string_view api_prefix = "/api/v1/maps";
-
-    if (target == api_prefix) {
+    if (target == API_V1_MAPS) {
         // Список карт
         std::string body = SerializeMapsList(game_.GetMaps());
         auto res = MakeJsonResponse(http::status::ok, body, version, keep_alive);
@@ -274,12 +272,12 @@ void ApiHandler::HandleMapsRequest(http::request<Body, http::basic_fields<Alloca
     }
 
     // Проверка наличия / после префикса и id
-    if (target.size() <= api_prefix.size() + 1 || target[api_prefix.size()] != '/') {
+    if (target.size() <= API_V1_MAPS.size() + 1 || target[API_V1_MAPS.size()] != '/') {
         return send(MakeErrorResponse(http::status::bad_request, "Bad request",
                                       version, keep_alive));
     }
 
-    std::string_view map_id = target.substr(api_prefix.size() + 1);
+    std::string_view map_id = target.substr(API_V1_MAPS.size() + 1);
     const auto* map = game_.FindMap(model::Map::Id(std::string(map_id)));
     if (!map) {
         return send(MakeErrorResponse(http::status::not_found, "Map not found",
@@ -728,6 +726,19 @@ void ApiHandler::UpdateDogPosition(model::Dog& dog, const model::Map& map, doubl
     }
 }
 
+inline ApiHandler::RoadBounds ApiHandler::CalculateRoadBounds(
+    double min_x, double max_x,
+    double min_y, double max_y,
+    double half_width) {
+
+    RoadBounds roadBounds;
+    roadBounds.min_x = min_x - half_width;
+    roadBounds.max_x = max_x + half_width;
+    roadBounds.min_y = min_y - half_width;
+    roadBounds.max_y = max_y + half_width;
+    return roadBounds;
+}
+
 void ApiHandler::ClampDogToRoad(model::Dog& dog, const model::Map& map, double dt) {
     const auto& speed = dog.GetSpeed();
     auto pos = dog.GetPosition();
@@ -749,24 +760,27 @@ void ApiHandler::ClampDogToRoad(model::Dog& dog, const model::Map& map, double d
     for (const auto& road : map.GetRoads()) {
         auto start = road.GetStart();
         auto end = road.GetEnd();
+        // Базовые координаты без учёта ширины дороги
+        double base_min_x, base_max_x, base_min_y, base_max_y;
+        
         if (road.IsHorizontal()) {
-            double road_y = static_cast<double>(start.y);
-            double min_x = std::min(start.x, end.x) - ROAD_HALF_WIDTH;
-            double max_x = std::max(start.x, end.x) + ROAD_HALF_WIDTH;
-            double min_y = road_y - ROAD_HALF_WIDTH;
-            double max_y = road_y + ROAD_HALF_WIDTH;
-            if (pos.x >= min_x && pos.x <= max_x && pos.y >= min_y && pos.y <= max_y) {
-                start_roads.push_back(&road);
-            }
+            base_min_x = std::min(start.x, end.x);
+            base_max_x = std::max(start.x, end.x);
+            base_min_y = base_max_y = static_cast<double>(start.y);
         } else {
-            double road_x = static_cast<double>(start.x);
-            double min_y = std::min(start.y, end.y) - ROAD_HALF_WIDTH;
-            double max_y = std::max(start.y, end.y) + ROAD_HALF_WIDTH;
-            double min_x = road_x - ROAD_HALF_WIDTH;
-            double max_x = road_x + ROAD_HALF_WIDTH;
-            if (pos.x >= min_x && pos.x <= max_x && pos.y >= min_y && pos.y <= max_y) {
-                start_roads.push_back(&road);
-            }
+            base_min_y = std::min(start.y, end.y);
+            base_max_y = std::max(start.y, end.y);
+            base_min_x = base_max_x = static_cast<double>(start.x);
+        }
+        
+        // Вычисляем границы с учётом ширины
+        auto bounds = CalculateRoadBounds(base_min_x, base_max_x, 
+                                          base_min_y, base_max_y, 
+                                          ROAD_HALF_WIDTH);
+        
+        if (pos.x >= bounds.min_x && pos.x <= bounds.max_x && 
+            pos.y >= bounds.min_y && pos.y <= bounds.max_y) {
+            start_roads.push_back(&road);
         }
     }
 
@@ -785,32 +799,25 @@ void ApiHandler::ClampDogToRoad(model::Dog& dog, const model::Map& map, double d
     for (const auto* road : start_roads) {
         auto start = road->GetStart();
         auto end = road->GetEnd();
-        double new_x = pos.x;
-        double new_y = pos.y;
-
+        
+        double base_min_x, base_max_x, base_min_y, base_max_y;
+        
         if (road->IsHorizontal()) {
-            // Горизонтальная дорога
-            double road_y = static_cast<double>(start.y);
-            double min_x = std::min(start.x, end.x) - ROAD_HALF_WIDTH;
-            double max_x = std::max(start.x, end.x) + ROAD_HALF_WIDTH;
-            double min_y = road_y - ROAD_HALF_WIDTH;
-            double max_y = road_y + ROAD_HALF_WIDTH;
-
-            // Ограничиваем целевую позицию в пределах дороги
-            new_x = std::clamp(target_x, min_x, max_x);
-            new_y = std::clamp(target_y, min_y, max_y);
+            base_min_x = std::min(start.x, end.x);
+            base_max_x = std::max(start.x, end.x);
+            base_min_y = base_max_y = static_cast<double>(start.y);
         } else {
-            // Вертикальная дорога
-            double road_x = static_cast<double>(start.x);
-            double min_y = std::min(start.y, end.y) - ROAD_HALF_WIDTH;
-            double max_y = std::max(start.y, end.y) + ROAD_HALF_WIDTH;
-            double min_x = road_x - ROAD_HALF_WIDTH;
-            double max_x = road_x + ROAD_HALF_WIDTH;
-
-            // Ограничиваем целевую позицию в пределах дороги
-            new_x = std::clamp(target_x, min_x, max_x);
-            new_y = std::clamp(target_y, min_y, max_y);
+            base_min_y = std::min(start.y, end.y);
+            base_max_y = std::max(start.y, end.y);
+            base_min_x = base_max_x = static_cast<double>(start.x);
         }
+        
+        auto bounds = CalculateRoadBounds(base_min_x, base_max_x, 
+                                          base_min_y, base_max_y, 
+                                          ROAD_HALF_WIDTH);
+        
+        double new_x = std::clamp(target_x, bounds.min_x, bounds.max_x);
+        double new_y = std::clamp(target_y, bounds.min_y, bounds.max_y);
 
         // Вычисляем расстояние от начальной позиции
         double dist = std::sqrt((new_x - pos.x) * (new_x - pos.x) + 
@@ -826,20 +833,31 @@ void ApiHandler::ClampDogToRoad(model::Dog& dog, const model::Map& map, double d
     // Проверяем, достигли ли границы
     const model::Road* final_road = map.FindRoadAt(best_x, best_y);
     if (final_road) {
+        auto start = final_road->GetStart();
+        auto end = final_road->GetEnd();
+        
+        double base_min_x, base_max_x, base_min_y, base_max_y;
+        
         if (final_road->IsHorizontal()) {
-            auto start = final_road->GetStart();
-            auto end = final_road->GetEnd();
-            double min_x = std::min(start.x, end.x) - ROAD_HALF_WIDTH;
-            double max_x = std::max(start.x, end.x) + ROAD_HALF_WIDTH;
-            if (best_x <= min_x + 0.001 || best_x >= max_x - 0.001) {
+            base_min_x = std::min(start.x, end.x);
+            base_max_x = std::max(start.x, end.x);
+            base_min_y = base_max_y = static_cast<double>(start.y);
+        } else {
+            base_min_y = std::min(start.y, end.y);
+            base_max_y = std::max(start.y, end.y);
+            base_min_x = base_max_x = static_cast<double>(start.x);
+        }
+        
+        auto bounds = CalculateRoadBounds(base_min_x, base_max_x, 
+                                          base_min_y, base_max_y, 
+                                          ROAD_HALF_WIDTH);
+        
+        if (final_road->IsHorizontal()) {
+            if (best_x <= bounds.min_x + 0.001 || best_x >= bounds.max_x - 0.001) {
                 dog.SetSpeed({0.0, 0.0});
             }
         } else {
-            auto start = final_road->GetStart();
-            auto end = final_road->GetEnd();
-            double min_y = std::min(start.y, end.y) - ROAD_HALF_WIDTH;
-            double max_y = std::max(start.y, end.y) + ROAD_HALF_WIDTH;
-            if (best_y <= min_y + 0.001 || best_y >= max_y - 0.001) {
+            if (best_y <= bounds.min_y + 0.001 || best_y >= bounds.max_y - 0.001) {
                 dog.SetSpeed({0.0, 0.0});
             }
         }

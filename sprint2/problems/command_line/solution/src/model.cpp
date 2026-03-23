@@ -18,7 +18,7 @@ void Map::AddOffice(Office office) {
     Office& o = offices_.emplace_back(std::move(office));
     try {
         warehouse_id_to_index_.emplace(o.GetId(), index);
-    } catch (...) {
+    } catch (const std::exception&) {
         // Удаляем офис из вектора, если не удалось вставить в unordered_map
         offices_.pop_back();
         throw;
@@ -32,7 +32,7 @@ void Game::AddMap(Map map) {
     } else {
         try {
             maps_.emplace_back(std::move(map));
-        } catch (...) {
+        } catch (const std::exception&) {
             map_id_to_index_.erase(it);
             throw;
         }
