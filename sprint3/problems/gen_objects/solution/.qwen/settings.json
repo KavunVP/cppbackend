@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(conan *)",
+      "Bash(mkdir *)",
+      "Bash(cmake *)",
+      "Bash(./game_server_tests)"
+    ]
+  },
+  "$version": 3
+}
