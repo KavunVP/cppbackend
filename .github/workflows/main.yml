@@ -187,10 +187,10 @@ jobs:
           cd cpp-backend-tests-practicum/scripts/sprint3
           ./flamegraph/run.sh
 
-      # - name: run tests sprint3 gen_objects
-      #   run: |
-      #     cd cpp-backend-tests-practicum/scripts/sprint3
-      #     ./gen_objects/run.sh
+      - name: run tests sprint3 gen_objects
+        run: |
+          cd cpp-backend-tests-practicum/scripts/sprint3
+          ./gen_objects/run.sh
 
       # - name: run tests sprint3 static_lib
       #   run: |
