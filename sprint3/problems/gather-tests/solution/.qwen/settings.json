@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake *)",
+      "Bash(conan *)",
+      "Bash(mkdir *)",
+      "Bash(./collision_detection_tests)",
+      "Bash(rm *)",
+      "Bash(git *)"
+    ]
+  },
+  "$version": 3
+}
