@@ -556,6 +556,10 @@ public:
         return nullptr;
     }
 
+    Sessions& GetSessions() noexcept {
+        return sessions_;
+    }
+
     const Sessions& GetSessions() const noexcept {
         return sessions_;
     }

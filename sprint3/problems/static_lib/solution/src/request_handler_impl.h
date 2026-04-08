@@ -698,9 +698,10 @@ void ApiHandler::UpdateGameState(uint64_t time_delta_ms) {
     // time_delta_ms в миллисекундах, переводим в секунды
     double dt = static_cast<double>(time_delta_ms) / 1000.0;
 
-    // Проходим по всем сессиям
+    // Проходим по всем сессиям (итерация по индексу, т.к. Tick может менять состояние)
     auto& sessions = game_.GetSessions();
-    for (auto& session : const_cast<std::vector<model::GameSession>&>(sessions)) {
+    for (size_t i = 0; i < sessions.size(); ++i) {
+        auto& session = sessions[i];
         const auto* map = session.GetMap();
         if (!map) continue;
 
@@ -741,18 +742,8 @@ void ApiHandler::UpdateDogPosition(model::Dog& dog, const model::Map& map, doubl
         const model::Road* current_road = map.FindRoadAt(pos.x, pos.y);
         if (current_road) {
             // Текущая позиция на дороге, но новая - нет
-            // Запоминаем ожидаемую позицию для сравнения
-            model::Position expected_pos{new_x, new_y};
-            
-            // Используем ограниченное перемещение
+            // ClampDogToRoad сам решит, останавливать собаку или нет
             ClampDogToRoad(dog, map, dt);
-            
-            // Если фактическая позиция не совпадает с ожидаемой, сбрасываем скорость
-            const auto& actual_pos = dog.GetPosition();
-            if (std::abs(actual_pos.x - expected_pos.x) > 0.001 ||
-                std::abs(actual_pos.y - expected_pos.y) > 0.001) {
-                dog.SetSpeed({0.0, 0.0});
-            }
         } else {
             // Собака не на дороге (не должно происходить)
             dog.SetSpeed({0.0, 0.0});
@@ -777,26 +768,24 @@ void ApiHandler::ClampDogToRoad(model::Dog& dog, const model::Map& map, double d
     const auto& speed = dog.GetSpeed();
     auto pos = dog.GetPosition();
 
-    // Если скорость нулевая, ничего не делаем
+    // If speed is zero, nothing to do
     if (speed.dx == 0.0 && speed.dy == 0.0) {
         return;
     }
 
-    // Вычисляем целевую позицию (где собака хотела бы оказаться)
+    // Calculate target position
     double target_x = pos.x + speed.dx * dt;
     double target_y = pos.y + speed.dy * dt;
 
     constexpr double ROAD_HALF_WIDTH = 0.4;
 
-    // Находим все дороги, на которых находится собака в текущей позиции
-    // Проверяем каждую дорогу вручную
+    // Find all roads the dog is currently on
     std::vector<const model::Road*> start_roads;
     for (const auto& road : map.GetRoads()) {
         auto start = road.GetStart();
         auto end = road.GetEnd();
-        // Базовые координаты без учёта ширины дороги
         double base_min_x, base_max_x, base_min_y, base_max_y;
-        
+
         if (road.IsHorizontal()) {
             base_min_x = std::min(start.x, end.x);
             base_max_x = std::max(start.x, end.x);
@@ -806,36 +795,35 @@ void ApiHandler::ClampDogToRoad(model::Dog& dog, const model::Map& map, double d
             base_max_y = std::max(start.y, end.y);
             base_min_x = base_max_x = static_cast<double>(start.x);
         }
-        
-        // Вычисляем границы с учётом ширины
-        auto bounds = CalculateRoadBounds(base_min_x, base_max_x, 
-                                          base_min_y, base_max_y, 
+
+        auto bounds = CalculateRoadBounds(base_min_x, base_max_x,
+                                          base_min_y, base_max_y,
                                           ROAD_HALF_WIDTH);
-        
-        if (pos.x >= bounds.min_x && pos.x <= bounds.max_x && 
+
+        if (pos.x >= bounds.min_x && pos.x <= bounds.max_x &&
             pos.y >= bounds.min_y && pos.y <= bounds.max_y) {
             start_roads.push_back(&road);
         }
     }
 
-    // Если собака не на дороге, останавливаем
+    // If dog is not on any road, stop it
     if (start_roads.empty()) {
         dog.SetSpeed({0.0, 0.0});
         return;
     }
 
-    // Для каждой дороги вычисляем ограниченную позицию и выбираем ту,
-    // которая позволяет переместиться дальше всего
+    // For each road, calculate the clamped position and choose the best one
     double best_dist = -1.0;
     double best_x = pos.x;
     double best_y = pos.y;
+    const model::Road* best_road = nullptr;
 
     for (const auto* road : start_roads) {
         auto start = road->GetStart();
         auto end = road->GetEnd();
-        
+
         double base_min_x, base_max_x, base_min_y, base_max_y;
-        
+
         if (road->IsHorizontal()) {
             base_min_x = std::min(start.x, end.x);
             base_max_x = std::max(start.x, end.x);
@@ -845,53 +833,63 @@ void ApiHandler::ClampDogToRoad(model::Dog& dog, const model::Map& map, double d
             base_max_y = std::max(start.y, end.y);
             base_min_x = base_max_x = static_cast<double>(start.x);
         }
-        
-        auto bounds = CalculateRoadBounds(base_min_x, base_max_x, 
-                                          base_min_y, base_max_y, 
+
+        auto bounds = CalculateRoadBounds(base_min_x, base_max_x,
+                                          base_min_y, base_max_y,
                                           ROAD_HALF_WIDTH);
-        
+
         double new_x = std::clamp(target_x, bounds.min_x, bounds.max_x);
         double new_y = std::clamp(target_y, bounds.min_y, bounds.max_y);
 
-        // Вычисляем расстояние от начальной позиции
-        double dist = std::sqrt((new_x - pos.x) * (new_x - pos.x) + 
+        double dist = std::sqrt((new_x - pos.x) * (new_x - pos.x) +
                                 (new_y - pos.y) * (new_y - pos.y));
 
         if (dist > best_dist) {
             best_dist = dist;
             best_x = new_x;
             best_y = new_y;
+            best_road = road;
         }
     }
 
-    // Проверяем, достигли ли границы
-    const model::Road* final_road = map.FindRoadAt(best_x, best_y);
-    if (final_road) {
-        auto start = final_road->GetStart();
-        auto end = final_road->GetEnd();
-        
-        double base_min_x, base_max_x, base_min_y, base_max_y;
-        
-        if (final_road->IsHorizontal()) {
-            base_min_x = std::min(start.x, end.x);
-            base_max_x = std::max(start.x, end.x);
-            base_min_y = base_max_y = static_cast<double>(start.y);
-        } else {
-            base_min_y = std::min(start.y, end.y);
-            base_max_y = std::max(start.y, end.y);
-            base_min_x = base_max_x = static_cast<double>(start.x);
-        }
-        
-        auto bounds = CalculateRoadBounds(base_min_x, base_max_x, 
-                                          base_min_y, base_max_y, 
-                                          ROAD_HALF_WIDTH);
-        
-        if (final_road->IsHorizontal()) {
-            if (best_x <= bounds.min_x + 0.001 || best_x >= bounds.max_x - 0.001) {
-                dog.SetSpeed({0.0, 0.0});
+    // Check if the target position was clamped on ANY axis.
+    // If clamped, check if there is a road ahead in the movement direction.
+    // If no road ahead, stop the dog.
+    if (best_road) {
+        bool x_clamped = (std::abs(best_x - target_x) > 0.001);
+        bool y_clamped = (std::abs(best_y - target_y) > 0.001);
+
+        // If any coordinate was clamped, check for road ahead
+        if (x_clamped || y_clamped) {
+            double step = ROAD_HALF_WIDTH * 0.5;
+            double check_x = best_x + speed.dx * step;
+            double check_y = best_y + speed.dy * step;
+
+            bool has_road_ahead = false;
+            for (const auto& road : map.GetRoads()) {
+                auto r_start = road.GetStart();
+                auto r_end = road.GetEnd();
+                if (road.IsHorizontal()) {
+                    double r_min_x = std::min(r_start.x, r_end.x) - ROAD_HALF_WIDTH;
+                    double r_max_x = std::max(r_start.x, r_end.x) + ROAD_HALF_WIDTH;
+                    double r_road_y = static_cast<double>(r_start.y);
+                    if (std::abs(check_y - r_road_y) <= ROAD_HALF_WIDTH &&
+                        check_x >= r_min_x && check_x <= r_max_x) {
+                        has_road_ahead = true;
+                        break;
+                    }
+                } else {
+                    double r_min_y = std::min(r_start.y, r_end.y) - ROAD_HALF_WIDTH;
+                    double r_max_y = std::max(r_start.y, r_end.y) + ROAD_HALF_WIDTH;
+                    double r_road_x = static_cast<double>(r_start.x);
+                    if (std::abs(check_x - r_road_x) <= ROAD_HALF_WIDTH &&
+                        check_y >= r_min_y && check_y <= r_max_y) {
+                        has_road_ahead = true;
+                        break;
+                    }
+                }
             }
-        } else {
-            if (best_y <= bounds.min_y + 0.001 || best_y >= bounds.max_y - 0.001) {
+            if (!has_road_ahead) {
                 dog.SetSpeed({0.0, 0.0});
             }
         }
