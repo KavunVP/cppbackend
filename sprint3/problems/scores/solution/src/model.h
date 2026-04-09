@@ -541,13 +541,12 @@ public:
     }
 
     Player* FindByDogIdAndMapId(const Dog::Id& dog_id, const Map::Id& map_id) const {
-        for (const auto& player : players_) {
-            if (player->GetDog()->GetId() == dog_id &&
-                player->GetSession()->GetMap()->GetId() == map_id) {
-                return player.get();
-            }
-        }
-        return nullptr;
+        auto it = std::find_if(players_.begin(), players_.end(),
+            [&](const auto& player) {
+                return player->GetDog()->GetId() == dog_id &&
+                       player->GetSession()->GetMap()->GetId() == map_id;
+            });
+        return it != players_.end() ? it->get() : nullptr;
     }
 
     const std::vector<std::unique_ptr<Player>>& GetPlayers() const noexcept {
@@ -612,12 +611,11 @@ public:
     }
 
     GameSession* FindSession(GameSession::Id id) noexcept {
-        for (auto& session : sessions_) {
-            if (session.GetId() == id) {
-                return &session;
-            }
-        }
-        return nullptr;
+        auto it = std::find_if(sessions_.begin(), sessions_.end(),
+            [&](const auto& session) {
+                return session.GetId() == id;
+            });
+        return it != sessions_.end() ? &*it : nullptr;
     }
 
     Sessions& GetSessions() noexcept {
@@ -631,10 +629,12 @@ public:
     // Найти или создать сессию для карты
     GameSession& GetOrCreateSession(const Map* map) {
         // Ищем существующую сессию для этой карты
-        for (auto& session : sessions_) {
-            if (session.GetMap() == map) {
-                return session;
-            }
+        auto it = std::find_if(sessions_.begin(), sessions_.end(),
+            [&](const auto& session) {
+                return session.GetMap() == map;
+            });
+        if (it != sessions_.end()) {
+            return *it;
         }
         // Не нашли — создаём новую
         return AddSession(map);

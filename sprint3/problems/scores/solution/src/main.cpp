@@ -104,7 +104,7 @@ struct Args {
     Args args;
     desc.add_options()
         ("help,h", "produce help message")
-        ("tick-period,t", po::value<unsigned long>(), "set tick period in milliseconds")
+        ("tick-period,t", po::value<uint64_t>(), "set tick period in milliseconds")
         ("config-file,c", po::value(&args.config_file)->value_name("file"), "set config file path")
         ("www-root,w", po::value(&args.www_root)->value_name("dir"), "set static files root")
         ("randomize-spawn-points", po::bool_switch(&args.randomize_spawn_points), "spawn dogs at random positions");
@@ -128,7 +128,7 @@ struct Args {
 
     // Обрабатываем tick-period, если указан
     if (vm.contains("tick-period")) {
-        args.tick_period = std::chrono::milliseconds{vm["tick-period"].as<unsigned long>()};
+        args.tick_period = std::chrono::milliseconds{vm["tick-period"].as<uint64_t>()};
     }
 
     return args;

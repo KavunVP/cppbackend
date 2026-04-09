@@ -158,7 +158,7 @@ GameData LoadGame(const std::filesystem::path& json_path) {
         double period_sec = config.at("period").as_double();
         double probability = config.at("probability").as_double();
         auto period_ms = std::chrono::milliseconds{
-            static_cast<long long>(period_sec * 1000.0)};
+            static_cast<uint64_t>(period_sec * 1000.0)};
         result.game.SetLootGeneratorConfig(period_ms, probability);
     }
 
