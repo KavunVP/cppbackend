@@ -55,13 +55,13 @@ void InitBoostLog() {
     logging::core::get()->add_sink(sink);
 }
 
-void LogMessage(std::string_view message_str, boost::json::value data) {
+void LogMessage(std::string_view message, boost::json::value data) {
     static logging::sources::severity_logger<> logger;
     logging::record rec = logger.open_record();
     if (rec) {
         logging::attribute_value_set& values = rec.attribute_values();
         values.insert("Message", 
-                      logging::attributes::make_attribute_value(std::string(message_str)));
+                      logging::attributes::make_attribute_value(std::string(message)));
         values.insert("AdditionalData", 
                       logging::attributes::make_attribute_value(std::move(data)));
         logger.push_record(std::move(rec));
