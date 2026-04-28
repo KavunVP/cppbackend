@@ -756,7 +756,6 @@ public:
 
     // Создать генератор случайных чисел для сессии
     std::mt19937_64 CreateSessionRng() {
-        std::uniform_int_distribution<std::mt19937_64::result_type> dist;
         std::random_device rd;
         return std::mt19937_64{rd()};
     }

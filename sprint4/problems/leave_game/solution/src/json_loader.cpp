@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include "constants.h"
 
 namespace json_loader {
 
@@ -13,10 +14,10 @@ model::Road LoadRoad(const boost::json::object& obj) {
     if (obj.contains("x1")) { // горизонтальная
         int x1 = obj.at("x1").as_int64();
         return model::Road(model::Road::HORIZONTAL, {x0, y0}, x1);
-    } else { // вертикальная
-        int y1 = obj.at("y1").as_int64();
-        return model::Road(model::Road::VERTICAL, {x0, y0}, y1);
     }
+    // вертикальная
+    int y1 = obj.at("y1").as_int64();
+    return model::Road(model::Road::VERTICAL, {x0, y0}, y1);
 }
 
 // Загрузка массива дорог
@@ -158,7 +159,7 @@ GameData LoadGame(const std::filesystem::path& json_path) {
         double period_sec = config.at("period").as_double();
         double probability = config.at("probability").as_double();
         auto period_ms = std::chrono::milliseconds{
-            static_cast<uint64_t>(period_sec * 1000.0)};
+            static_cast<uint64_t>(period_sec * MILLISECONDS_PER_SECOND)};
         result.game.SetLootGeneratorConfig(period_ms, probability);
     }
 
@@ -166,7 +167,7 @@ GameData LoadGame(const std::filesystem::path& json_path) {
     if (root.contains("dogRetirementTime")) {
         double retirement_sec = root.at("dogRetirementTime").as_double();
         auto retirement_ms = std::chrono::milliseconds{
-            static_cast<uint64_t>(retirement_sec * 1000.0)};
+            static_cast<uint64_t>(retirement_sec * MILLISECONDS_PER_SECOND)};
         result.game.SetDogRetirementTime(retirement_ms);
     }
 

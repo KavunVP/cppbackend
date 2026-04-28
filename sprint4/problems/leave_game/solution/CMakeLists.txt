@@ -26,6 +26,7 @@ target_link_libraries(game_model PUBLIC CONAN_PKG::boost Threads::Threads)
 
 # Исполняемый файл сервера
 add_executable(game_server
+    src/constants.h
     src/main.cpp
     src/http_server.cpp
     src/http_server.h

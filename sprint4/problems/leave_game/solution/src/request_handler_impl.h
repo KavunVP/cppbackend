@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
+#include "constants.h"
 
 namespace http_handler {
 
@@ -331,7 +332,7 @@ void ApiHandler::HandleJoinRequest(http::request<Body, http::basic_fields<Alloca
     boost::json::value json_value;
     try {
         json_value = boost::json::parse(req.body());
-    } catch (...) {
+    } catch (const std::exception&) {
         return send(MakeErrorResponse(http::status::bad_request,
                                       "Join game request parse error",
                                       version, keep_alive, "invalidArgument", true));
@@ -806,7 +807,7 @@ struct UnifiedCollisionEvent {
 
 void ApiHandler::UpdateGameState(uint64_t time_delta_ms) {
     // time_delta_ms в миллисекундах, переводим в секунды
-    double dt = static_cast<double>(time_delta_ms) / 1000.0;
+    double dt = static_cast<double>(time_delta_ms) / MILLISECONDS_PER_SECOND;
 
     // Проходим по всем сессиям
     auto& sessions = game_.GetSessions();
@@ -1227,7 +1228,7 @@ void ApiHandler::HandlePlayerActionRequest(http::request<Body, http::basic_field
     boost::json::value json_value;
     try {
         json_value = boost::json::parse(req.body());
-    } catch (...) {
+    } catch (const std::exception&) {
         return send(MakeErrorResponse(http::status::bad_request,
                                       "Failed to parse request JSON",
                                       version, keep_alive, "invalidArgument", true));
@@ -1358,7 +1359,7 @@ void ApiHandler::HandleTickRequest(http::request<Body, http::basic_fields<Alloca
     boost::json::value json_value;
     try {
         json_value = boost::json::parse(req.body());
-    } catch (...) {
+    } catch (const std::exception&) {
         return send(MakeErrorResponse(http::status::bad_request,
                                       "Failed to parse tick request JSON",
                                       version, keep_alive, "invalidArgument", true));
@@ -1456,7 +1457,7 @@ void ApiHandler::HandleRecordsRequest(http::request<Body, http::basic_fields<All
             }
             try {
                 start = std::stoul(start_str);
-            } catch (...) {
+            } catch (const std::exception&) {
                 return send(MakeErrorResponse(http::status::bad_request,
                                               "Invalid start parameter",
                                               version, keep_alive, "invalidArgument", true));
@@ -1475,7 +1476,7 @@ void ApiHandler::HandleRecordsRequest(http::request<Body, http::basic_fields<All
             }
             try {
                 max_items = std::stoul(max_str);
-            } catch (...) {
+            } catch (const std::exception&) {
                 return send(MakeErrorResponse(http::status::bad_request,
                                               "Invalid maxItems parameter",
                                               version, keep_alive, "invalidArgument", true));

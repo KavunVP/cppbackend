@@ -6,6 +6,7 @@
 #include <optional>
 #include <chrono>
 #include <pqxx/pqxx>
+#include "constants.h"
 
 // Структура для хранения информации о рекорде
 struct RecordEntry {
@@ -62,7 +63,7 @@ public:
             records.push_back({
                 row[0].as<std::string>(),
                 row[1].as<int>(),
-                row[2].as<int>() / 1000.0  // переводим миллисекунды в секунды
+                row[2].as<int>() / MILLISECONDS_PER_SECOND  // переводим миллисекунды в секунды
             });
         }
 
